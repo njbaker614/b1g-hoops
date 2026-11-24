@@ -1,0 +1,26 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function adminDoc() { return /databases/$(database)/documents/meta/admins; }
+    function isAdmin() { return signedIn() && exists(adminDoc()) && request.auth.uid in get(adminDoc()).data.uids; }
+
+    // Everything: any signed in person can read, only the commissioner can write.
+    match /{document=**} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    // The first person to claim commissioner creates this; after that only the commissioner can change it.
+    match /meta/admins {
+      allow create: if signedIn() && !exists(adminDoc()) && request.resource.data.uids == [request.auth.uid];
+    }
+    // Each person keeps their own display name.
+    match /profiles/{uid} {
+      allow write: if signedIn() && request.auth.uid == uid;
+    }
+    // Each coach saves only his own lineup moves.
+    match /coachlu/{uid} {
+      allow write: if signedIn() && request.auth.uid == uid;
+    }
+  }
+}
