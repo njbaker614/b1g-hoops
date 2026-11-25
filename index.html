@@ -1254,7 +1254,7 @@ function slpRow(o){ // o:{k, slot, zone, i, edit, sel, pts, proj, act, actLab, a
     ${o.act?`<button class="sact ${o.actCls||''}" data-act="${o.act}" data-k="${esc(o.k)}" aria-label="${o.actLab}">${o.actCls==='drop'?'<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><rect x="1" y="5" width="10" height="2" rx="1" fill="currentColor"/></svg>':'<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><rect x="1" y="5" width="10" height="2" rx="1" fill="currentColor"/><rect x="5" y="1" width="2" height="10" rx="1" fill="currentColor"/></svg>'}</button>`:''}</div>`;
 }
 function claimBox(){if(!db||!S.me||!S.cfg.coaches.length)return '';const mine=myCid();
-  if(mine){const c=coachById(mine);return `<div class="notice" style="margin-bottom:12px">You are signed in as the coach of <strong>${esc(c.team||c.name)}</strong>. Set your starters and bench any time before a round's first tip; the commissioner handles adds and drops.</div>`}
+  if(mine){const c=coachById(mine);return S.admin?`<div class="notice" style="margin-bottom:12px">You are the commissioner and the coach of <strong>${esc(c.team||c.name)}</strong>. Roster Summary opens on your team; you can still view and fix any team.</div>`:`<div class="notice" style="margin-bottom:12px">You are signed in as the coach of <strong>${esc(c.team||c.name)}</strong>. Set your starters and bench any time before a round's first tip; the commissioner handles adds and drops.</div>`}
   if(S.admin)return '';const d=S.coachlu[S.me];
   if(d&&d.cid&&S.cfg.coaches.some(c=>c.id===d.cid)){const c=coachById(d.cid);return `<div class="notice" style="margin-bottom:12px">You asked to manage <strong>${esc(c.team||c.name)}</strong>. Waiting for the commissioner to approve. <button class="ghost" data-act="claimCancel">Cancel request</button></div>`}
   const open=S.cfg.coaches.filter(c=>!S.links[c.id]);if(!open.length)return '';
@@ -1262,7 +1262,7 @@ function claimBox(){if(!db||!S.me||!S.cfg.coaches.length)return '';const mine=my
 function vRosters(){
   const cs=S.cfg.coaches;if(!cs.length)return dataNote()+head('Roster Summary','')+noCoaches();
   S.slp=S.slp||{tab:'team',rd:null,f:'P',q:''};if(!S.slp.rd)S.slp.rd=effRound()||NROUNDS;
-  if(!cs.some(c=>c.id===S.rosterView))S.rosterView=cs[0].id;
+  if(!cs.some(c=>c.id===S.rosterView)){const m=myCid();S.rosterView=m&&cs.some(c=>c.id===m)?m:cs[0].id}
   const cid=S.rosterView,c=coachById(cid),tab=S.slp.tab,rn=S.slp.rd,R=ROUNDS[rn-1];
   const hue=hueOf(c.name+c.team);
   const tabsDef=[['matchup','Matchup','⚔'],['team','Team','◉'],['league','League','★'],['players','Players','☰']];
@@ -1433,6 +1433,7 @@ function coachAccountsPanel(){const cs=S.cfg.coaches;if(!cs.length)return '';con
   const pend=Object.entries(S.coachlu).filter(([u,d])=>d&&d.cid&&S.links[d.cid]!==u&&cs.some(c=>c.id===d.cid));
   return `<div class="panel" style="margin:16px 0"><h3>Coach accounts</h3><p class="small muted" style="margin:0 0 8px">Share the hub with each coach as a <strong>Contributor</strong> (Share menu). Each coach opens Roster Summary, picks his team and taps This is my team. Approve it here and he can set his own starters and bench; he cannot change anyone else's team or make adds and drops.</p>
   ${pend.length?`<div style="margin-bottom:10px">${pend.map(([u,d])=>{const c=coachById(d.cid);return `<div class="row" style="gap:8px;margin:4px 0"><span><strong>${nm(u)}</strong> wants <strong>${esc(c.team||c.name)}</strong> (${esc(c.name)})</span><button data-act="claimOk" data-u="${u}" data-c="${d.cid}">Approve</button><button class="ghost" data-act="claimNo" data-u="${u}">Decline</button></div>`}).join('')}</div>`:''}
+  ${S.me&&!myCid()&&!S.preview?`<div class="row" style="gap:8px;margin:0 0 10px;flex-wrap:wrap"><span class="small"><strong>You coach a team too?</strong> Link your own account:</span><select id="linkMeSel">${cs.filter(c=>!S.links[c.id]).map(c=>`<option value="${c.id}">${esc(c.team||c.name)} · ${esc(c.name)}</option>`).join('')}</select><button data-act="linkMe">Link my team</button></div>`:''}
   <div class="row" style="gap:8px;margin:0 0 10px"><select id="prevSel">${cs.map(c=>`<option value="${c.id}">${esc(c.team||c.name)} · ${esc(c.name)}</option>`).join('')}</select><button class="ghost" data-act="previewGo">Preview as coach</button></div>
   <div class="tw"><table><thead><tr><th>Team</th><th>Coach</th><th>Signed in account</th><th></th></tr></thead><tbody>${cs.map(c=>{const u=S.links[c.id];return `<tr><td>${esc(c.team||'')}</td><td>${esc(c.name)}</td><td>${u?nm(u):'<span class="muted">Not linked</span>'}</td><td>${u?`<button class="ghost" data-act="claimUnlink" data-c="${c.id}">Unlink</button>`:''}</td></tr>`}).join('')}</tbody></table></div></div>`}
 function vCommish(){
@@ -1532,6 +1533,7 @@ async function saveMyLineup(cid,r){const prev=S.coachlu[S.me]||{};const ts=Date.
 V.addEventListener('click',async e=>{
   const b=e.target.closest('[data-act]');if(!b||b.tagName==='SELECT')return;const a=b.dataset.act;
   if(a==='glog'){S.glP=b.dataset.p;if(location.hash==='#game-log')render();return}
+  if(a==='linkMe'){const cid=document.getElementById('linkMeSel')?.value;if(!cid||!S.me)return;const links={...S.links};for(const k in links)if(links[k]===S.me)delete links[k];links[cid]=S.me;S.rosterView=cid;await write(()=>db.doc('league/links').set({map:links}),`Linked you to ${coachById(cid)?.team||'your team'}`);return}
   if(a==='previewGo'){if(!S.realAdmin)return;const v=document.getElementById('prevSel')?.value;if(v)startPreview(v);return}
   if(a==='previewExit'){endPreview();return}
   if(a==='editCoach'){S.editCoach=b.dataset.c;render();setTimeout(()=>document.getElementById('ecName')?.focus(),0);return}
