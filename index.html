@@ -987,7 +987,7 @@ function renderNav(){
   document.getElementById('nav').innerHTML=NAV.map(([g,items])=>`<div class="navgrp">${g?`<span class="lbl">${g}</span>`:''}${items.map(([h,l])=>`<a href="#${h}"${cur===h?' aria-current="page"':''}>${l}</a>`).join('')}</div>`).join('');
 }
 function dataNote(){
-  if(S.dbOK===false)return `<div class="notice warn" style="margin-bottom:16px">League data (coaches, draft, rosters, results) shows once you sign in with Google (button at the bottom right). The rules, schedule and player pool are below.</div>`;
+  if(S.dbOK===false)return `<div class="notice warn" style="margin-bottom:16px">League data (coaches, draft, rosters, results) shows once you sign in with Google and enter the league password from the commissioner (box at the bottom right). The rules, schedule and player pool are below.</div>`;
   if(S.dbOK&&!S.loaded)return `<div class="notice" style="margin-bottom:16px" id="loadNote">Loading league data…</div>`;
   return '';
 }

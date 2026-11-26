@@ -4,23 +4,39 @@ service cloud.firestore {
     function signedIn() { return request.auth != null; }
     function adminDoc() { return /databases/$(database)/documents/meta/admins; }
     function isAdmin() { return signedIn() && exists(adminDoc()) && request.auth.uid in get(adminDoc()).data.uids; }
+    function secretDoc() { return /databases/$(database)/documents/secret/league; }
+    function isMember() { return signedIn() && (isAdmin() || exists(/databases/$(database)/documents/members/$(request.auth.uid))); }
 
-    // Everything: any signed in person can read, only the commissioner can write.
-    match /{document=**} {
-      allow read: if signedIn();
-      allow write: if isAdmin();
+    // League data: only league members (people who entered the league password) can read; only the commissioner can write.
+    // The password and the member list are handled separately below.
+    match /{col}/{document=**} {
+      allow read: if col != 'secret' && col != 'members' && col != 'meta' && isMember();
+      allow write: if col != 'secret' && col != 'members' && col != 'meta' && isAdmin();
     }
-    // The first person to claim commissioner creates this; after that only the commissioner can change it.
+    // Who the commissioner is. Anyone signed in can see it; the first person to claim it creates it.
     match /meta/admins {
+      allow read: if signedIn();
       allow create: if signedIn() && !exists(adminDoc()) && request.resource.data.uids == [request.auth.uid];
+      allow update, delete: if isAdmin();
     }
-    // Each person keeps their own display name.
+    // The league password. Only the commissioner can see or change it.
+    match /secret/{d} {
+      allow read, write: if isAdmin();
+    }
+    // League members. A person can add himself only by sending the correct password.
+    match /members/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow create: if signedIn() && request.auth.uid == uid && exists(secretDoc())
+                    && request.resource.data.code == get(secretDoc()).data.code;
+      allow delete: if isAdmin() || (signedIn() && request.auth.uid == uid);
+    }
+    // Each member keeps his own display name.
     match /profiles/{uid} {
-      allow write: if signedIn() && request.auth.uid == uid;
+      allow write: if isMember() && request.auth.uid == uid;
     }
-    // Each coach saves only his own lineup moves.
+    // Each member saves only his own lineup moves and team join.
     match /coachlu/{uid} {
-      allow write: if signedIn() && request.auth.uid == uid;
+      allow write: if isMember() && request.auth.uid == uid;
     }
   }
 }
