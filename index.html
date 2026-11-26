@@ -843,10 +843,12 @@ let db=null;
 
 const allPlayers=()=>[...BASE_PLAYERS,...S.extra];
 const P=()=>Object.fromEntries(allPlayers().map(p=>[p.id,p]));
-let RAWCOACHES=[];
-function applyNames(raw){if(raw)RAWCOACHES=raw;return RAWCOACHES.map((c,i)=>{const u=S.links&&S.links[c.id];const d=u&&S.coachlu&&S.coachlu[u]&&S.coachlu[u].cid===c.id?S.coachlu[u]:null;const acct=u&&S.names&&S.names[u];const first=acct?acct.split(' ')[0]+' '+(acct.split(' ').slice(1).join(' ')):'';
+let RAWCOACHES=[];let LINKSRAW={};
+function computeLinks(){const m={...LINKSRAW};const used=new Set(Object.values(m));const ids=new Set((RAWCOACHES||[]).map(c=>c.id));
+  Object.entries(S.coachlu||{}).filter(([u,d])=>d&&d.cid&&ids.has(d.cid)&&!used.has(u)).sort((a,b)=>(a[1].claimedAt||0)-(b[1].claimedAt||0)).forEach(([u,d])=>{if(!m[d.cid]){m[d.cid]=u;used.add(u)}});S.links=m}
+function applyNames(raw){if(raw){RAWCOACHES=raw;computeLinks()}return RAWCOACHES.map((c,i)=>{const u=S.links&&S.links[c.id];const d=u&&S.coachlu&&S.coachlu[u]&&S.coachlu[u].cid===c.id?S.coachlu[u]:null;const acct=u&&S.names&&S.names[u];const first=acct?acct.split(' ')[0]+' '+(acct.split(' ').slice(1).join(' ')):'';
   return {...c,name:(d&&d.name)||c.name||(acct?acct.trim():'')||`Coach ${i+1}`,team:(d&&d.team)||c.team||`Team ${String.fromCharCode(65+i)}`}})}
-function refreshNames(){S.cfg={...S.cfg,coaches:applyNames()}}
+function refreshNames(){computeLinks();S.cfg={...S.cfg,coaches:applyNames()}}
 const coachById=id=>S.cfg.coaches.find(c=>c.id===id);
 const coachName=id=>coachById(id)?.name||'Open slot';
 const coachTeam=id=>coachById(id)?.team||'';
@@ -1003,7 +1005,7 @@ function vHome(){
   else clock=`<span class="lbl">Season</span><span class="val">Final</span>`;
   const coaches=S.cfg.coaches.length;
   const st=ready()?standings():null;
-  return `${dataNote()}
+  return `${dataNote()}${claimBox()}
   <section class="hero">
     <div class="panel" style="padding:22px">
       <div class="eyebrow">Men's basketball · 2026–27</div>
@@ -1260,10 +1262,9 @@ function slpRow(o){ // o:{k, slot, zone, i, edit, sel, pts, proj, act, actLab, a
 function nameEditor(cid){if(!S.nameEdit)return '';const c=coachById(cid);return `<div class="panel" style="margin:-4px 0 12px"><div class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end"><label class="f" style="flex:1 1 160px">Coach name<input id="myCoachName" value="${esc(c?.name||'')}" maxlength="40"></label><label class="f" style="flex:1 1 160px">Team name<input id="myTeamName" value="${esc(c?.team||'')}" maxlength="40"></label><button class="pri" data-act="myNamesSave">Save</button><button class="ghost" data-act="myNamesCancel">Cancel</button></div><p class="tiny muted" style="margin:6px 0 0">Shown to the whole league. Leave coach name blank to use your sign in name.</p></div>`}
 function claimBox(){if(!db||!S.me||!S.cfg.coaches.length)return '';const mine=myCid();
   if(mine){const c=coachById(mine);return S.admin?`<div class="notice" style="margin-bottom:12px">You are the commissioner and the coach of <strong>${esc(c.team||c.name)}</strong>. Roster Summary opens on your team; you can still view and fix any team. <button class="ghost" data-act="myNames">Edit my names</button></div>${nameEditor(mine)}`:`<div class="notice" style="margin-bottom:12px">You are signed in as the coach of <strong>${esc(c.team||c.name)}</strong>. Set your starters and bench any time before a round's first tip; the commissioner handles adds and drops. <button class="ghost" data-act="myNames">Edit my names</button></div>${nameEditor(mine)}`}
-  if(S.admin)return '';const d=S.coachlu[S.me];
-  if(d&&d.cid&&S.cfg.coaches.some(c=>c.id===d.cid)){const c=coachById(d.cid);return `<div class="notice" style="margin-bottom:12px">You asked to manage <strong>${esc(c.team||c.name)}</strong>. Waiting for the commissioner to approve. <button class="ghost" data-act="claimCancel">Cancel request</button></div>`}
+  if(S.admin)return '';
   const open=S.cfg.coaches.filter(c=>!S.links[c.id]);if(!open.length)return '';
-  return `<div class="panel" style="margin-bottom:12px"><strong>Are you a coach in this league?</strong> <span class="small muted">Claim your team once and you can set your own lineup each round.</span><div class="row" style="margin-top:8px;gap:8px"><select id="claimSel">${open.map(c=>`<option value="${c.id}">${esc(c.team||c.name)} · ${esc(c.name)}</option>`).join('')}</select><button data-act="claimTeam">This is my team</button></div></div>`}
+  return `<div class="panel" style="margin-bottom:12px"><strong>Are you a coach in this league?</strong> <span class="small muted">Pick your name and tap This is my team. You are linked right away and can set your own lineup each round.</span><div class="row" style="margin-top:8px;gap:8px"><select id="claimSel">${open.map(c=>`<option value="${c.id}">${esc(c.team||c.name)} · ${esc(c.name)}</option>`).join('')}</select><button data-act="claimTeam">This is my team</button></div></div>`}
 function vRosters(){
   const cs=S.cfg.coaches;if(!cs.length)return dataNote()+head('Roster Summary','')+noCoaches();
   S.slp=S.slp||{tab:'team',rd:null,f:'P',q:''};if(!S.slp.rd)S.slp.rd=effRound()||NROUNDS;
@@ -1435,8 +1436,8 @@ function injuryPanel(){const ent=Object.entries(S.inj).filter(([k,x])=>INJL[x?.s
   ${ent.length?`<div class="tw"><table><thead><tr><th>Player</th><th>Status</th><th>Note</th><th>Source</th><th></th></tr></thead><tbody>${ent.map(([k,x])=>{const p=P()[k];return `<tr><td>${p?esc(p.name):esc(k)} ${p?chip(p.team):''}</td><td><span class="inj inj-${x.s}">${x.s}</span> ${INJL[x.s]}</td><td class="small">${esc(x.note||'')}</td><td class="tiny muted">${x.manual?'Commissioner':esc(x.src||'Daily update')}</td><td><button class="ghost" data-act="injClear" data-p="${k}">Clear</button></td></tr>`}).join('')}</tbody></table></div>`:'<p class="small muted">No one is on the injury report.</p>'}</div>`}
 async function saveInj(players){const asOf=S.injAsOf||new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});await db.doc('league/injuries').set({asOf,players})}
 function coachAccountsPanel(){const cs=S.cfg.coaches;if(!cs.length)return '';const nm=u=>esc(S.names[u]||'Someone');
-  const pend=Object.entries(S.coachlu).filter(([u,d])=>d&&d.cid&&S.links[d.cid]!==u&&cs.some(c=>c.id===d.cid));
-  return `<div class="panel" style="margin:16px 0"><h3>Coach accounts</h3><p class="small muted" style="margin:0 0 8px">Share the hub with each coach as a <strong>Contributor</strong> (Share menu). Each coach opens Roster Summary, picks his team and taps This is my team. Approve it here and he can set his own starters and bench; he cannot change anyone else's team or make adds and drops.</p>
+  const pend=[];
+  return `<div class="panel" style="margin:16px 0"><h3>Coach accounts</h3><p class="small muted" style="margin:0 0 8px">Coaches link themselves: once signed in, each one opens Home or Roster Summary, picks his name and taps <strong>This is my team</strong>. It links right away, nothing to approve. He can then set his own starters and bench and edit his own names, but not other teams, adds and drops, or the draft. If someone picks the wrong team, tap Unlink. (claude.ai version only: share the hub with each coach as a Contributor first.)</p>
   ${pend.length?`<div style="margin-bottom:10px">${pend.map(([u,d])=>{const c=coachById(d.cid);return `<div class="row" style="gap:8px;margin:4px 0"><span><strong>${nm(u)}</strong> wants <strong>${esc(c.team||c.name)}</strong> (${esc(c.name)})</span><button data-act="claimOk" data-u="${u}" data-c="${d.cid}">Approve</button><button class="ghost" data-act="claimNo" data-u="${u}">Decline</button></div>`}).join('')}</div>`:''}
   ${S.me&&!myCid()&&!S.preview?`<div class="row" style="gap:8px;margin:0 0 10px;flex-wrap:wrap"><span class="small"><strong>You coach a team too?</strong> Link your own account:</span><select id="linkMeSel">${cs.filter(c=>!S.links[c.id]).map(c=>`<option value="${c.id}">${esc(c.team||c.name)} · ${esc(c.name)}</option>`).join('')}</select><button data-act="linkMe">Link my team</button></div>`:''}
   <div class="row" style="gap:8px;margin:0 0 10px"><select id="prevSel">${cs.map(c=>`<option value="${c.id}">${esc(c.team||c.name)} · ${esc(c.name)}</option>`).join('')}</select><button class="ghost" data-act="previewGo">Preview as coach</button></div>
@@ -1541,7 +1542,7 @@ V.addEventListener('click',async e=>{
   if(a==='myNames'){S.nameEdit=true;render();setTimeout(()=>document.getElementById('myTeamName')?.focus(),0);return}
   if(a==='myNamesCancel'){S.nameEdit=false;render();return}
   if(a==='myNamesSave'){const cid=myCid();if(!cid||!S.me)return;const n=document.getElementById('myCoachName').value.trim().slice(0,40),t=document.getElementById('myTeamName').value.trim().slice(0,40);if(S.preview){S.nameEdit=false;render();toast('Preview only: nothing was saved');return}const prev=S.coachlu[S.me]||{cid,claimedAt:Date.now(),hist:[]};const doc={...prev,cid,name:n,team:t};S.coachlu={...S.coachlu,[S.me]:doc};S.nameEdit=false;refreshNames();render();await write(()=>db.doc('coachlu/'+S.me).set(doc),`Saved ${t||'team'}${n?' - '+n:''}`);return}
-  if(a==='linkMe'){const cid=document.getElementById('linkMeSel')?.value;if(!cid||!S.me)return;const links={...S.links};for(const k in links)if(links[k]===S.me)delete links[k];links[cid]=S.me;S.rosterView=cid;await write(()=>db.doc('league/links').set({map:links}),`Linked you to ${coachById(cid)?.team||'your team'}`);return}
+  if(a==='linkMe'){const cid=document.getElementById('linkMeSel')?.value;if(!cid||!S.me)return;const links={...LINKSRAW};for(const k in links)if(links[k]===S.me)delete links[k];links[cid]=S.me;S.rosterView=cid;await write(()=>db.doc('league/links').set({map:links}),`Linked you to ${coachById(cid)?.team||'your team'}`);return}
   if(a==='previewGo'){if(!S.realAdmin)return;const v=document.getElementById('prevSel')?.value;if(v)startPreview(v);return}
   if(a==='previewExit'){endPreview();return}
   if(a==='editCoach'){S.editCoach=b.dataset.c;render();setTimeout(()=>document.getElementById('ecName')?.focus(),0);return}
@@ -1552,11 +1553,11 @@ V.addEventListener('click',async e=>{
   if(a==='ordSel'){if(S.dragJustEnded)return;const i=+b.dataset.i;if(S.ordSel==null){S.ordSel=i;render();return}const j=S.ordSel;S.ordSel=null;if(i===j){render();return}await swapOrder(j,i);return}
   if(a==='injSet'){const pid=document.getElementById('injP').value,st=document.getElementById('injS').value,note=document.getElementById('injN').value.trim();const pl={...S.inj,[pid]:{s:st,note,manual:true,ts:Date.now()}};S.inj=pl;render();await write(()=>saveInj(pl),`${P()[pid]?.name||pid} marked ${INJL[st]}`);return}
   if(a==='injClear'){const pid=b.dataset.p;const pl={...S.inj};delete pl[pid];S.inj=pl;render();await write(()=>saveInj(pl),`${P()[pid]?.name||pid} cleared`);return}
-  if(a==='claimTeam'){const cid=document.getElementById('claimSel')?.value;if(!cid||!db||!S.me)return;const doc={cid,claimedAt:Date.now(),hist:[]};S.coachlu={...S.coachlu,[S.me]:doc};render();await write(()=>db.doc('coachlu/'+S.me).set(doc),'Request sent to the commissioner');return}
+  if(a==='claimTeam'){const cid=document.getElementById('claimSel')?.value;if(!cid||!db||!S.me)return;if(S.links[cid]){toast('Someone just linked that team. Pick another or ask the commissioner.');render();return}const prev=S.coachlu[S.me]||{};const doc={...prev,cid,claimedAt:Date.now(),hist:prev.cid===cid?(prev.hist||[]):[]};S.coachlu={...S.coachlu,[S.me]:doc};computeLinks();refreshNames();S.rosterView=cid;render();await write(()=>db.doc('coachlu/'+S.me).set(doc),`You are linked to ${coachById(cid)?.team||'your team'}`);return}
   if(a==='claimCancel'){if(!db||!S.me)return;const c={...S.coachlu};delete c[S.me];S.coachlu=c;render();await write(()=>db.doc('coachlu/'+S.me).delete(),'Request canceled');return}
   if(a==='claimOk'){const links={...S.links};for(const k in links)if(links[k]===b.dataset.u)delete links[k];links[b.dataset.c]=b.dataset.u;await write(()=>db.doc('league/links').set({map:links}),'Coach linked');return}
   if(a==='claimNo'){await write(()=>db.doc('coachlu/'+b.dataset.u).delete(),'Request declined');return}
-  if(a==='claimUnlink'){const links={...S.links};delete links[b.dataset.c];await write(()=>db.doc('league/links').set({map:links}),'Coach unlinked');return}
+  if(a==='claimUnlink'){const cid=b.dataset.c,u=S.links[cid];const raw={...LINKSRAW};delete raw[cid];await write(async()=>{await db.doc('league/links').set({map:raw});if(u&&S.coachlu[u]?.cid===cid&&u!==S.me)await db.doc('coachlu/'+u).delete()},'Coach unlinked');return}
   if(a==='sort'){const st=SORT[b.dataset.t];if(st.k===b.dataset.k)st.d=st.d==='asc'?'desc':'asc';else{st.k=b.dataset.k;st.d=b.dataset.def}render();return}
   if(!db&&!['cancel','slpTab','slpRd','slpTeamGo','slpF','cancelTips'].includes(a))return;
   if(a==='addCoach'){if(!leagueSize()){toast('Set the league size first.');return}if(S.cfg.coaches.length>=leagueSize()){toast(`All ${leagueSize()} spots are filled.`);return}const n=document.getElementById('ncName').value.trim();
@@ -1751,8 +1752,8 @@ setInterval(()=>{const el=document.getElementById('pickClock');if(!el)return;con
   db.collection('changes').orderBy('ts','desc').limit(300).onSnapshot(q=>{S.changes=q.docs.map(x=>({...x.data(),_id:x.id}));done('changes',q);render()},err('changes'));
   db.doc('league/curstats').onSnapshot(s=>{if(s.exists){const v=s.data();if(v.players&&Object.keys(v.players).length){CUR={...v.players};CUR_ASOF=v.asOf||CUR_ASOF}if(v.teams&&Object.keys(v.teams).length){CURT={...v.teams};blendTeams()}render()}},()=>{});
   db.doc('league/injuries').onSnapshot(s=>{const v=s.exists?s.data():{};S.inj=structuredClone(v.players||{});S.injAsOf=v.asOf||null;render()},()=>{});
-  db.doc('league/links').onSnapshot(s=>{S.links=s.exists?{...(s.data().map||{})}:{};refreshNames();loadNames();render()},()=>{});
-  db.collection('coachlu').onSnapshot(q=>{const m={};q.docs.forEach(x=>m[x.id]=structuredClone(x.data()));S.coachlu=m;refreshNames();loadNames();render()},()=>{});
+  db.doc('league/links').onSnapshot(s=>{LINKSRAW=s.exists?{...(s.data().map||{})}:{};computeLinks();refreshNames();loadNames();render()},()=>{});
+  db.collection('coachlu').onSnapshot(q=>{const m={};q.docs.forEach(x=>m[x.id]=structuredClone(x.data()));S.coachlu=m;computeLinks();refreshNames();loadNames();render()},()=>{});
   db.doc('league/tips').onSnapshot(s=>{S.tips=s.exists?{...(s.data().times||{})}:{};render()},()=>{});
   db.collection('players').onSnapshot(q=>{S.extra=q.docs.map(x=>({...x.data()}));done('players',q);render()},err('players'));
 })();
