@@ -1,0 +1,76 @@
+{
+ "asOf": "Nov 27, 2026",
+ "updatedAt": "2026-11-27T12:46:39Z",
+ "players": {
+  "andrew-mckeever-iowa": {
+   "s": "Q",
+   "note": "Undisclosed injury listed Nov 23, uncertain to play.",
+   "src": "Covers, Sports Reference box scores"
+  },
+  "coen-carr-msu": {
+   "s": "D",
+   "note": "Knee injury reported Nov 20, uncertain to play; missed the Nov 21 game vs Detroit Mercy.",
+   "src": "Covers, Sports Reference box scores"
+  },
+  "david-mirkovic-ill": {
+   "s": "D",
+   "note": "Foot surgery recovery plus a Nov 1 appendectomy; has not played and has no return date.",
+   "src": "Covers, box scores"
+  },
+  "eric-reibe-usc": {
+   "s": "O",
+   "note": "Foot, expected out until the end of the calendar year.",
+   "src": "Covers"
+  },
+  "jack-janicki-wis": {
+   "s": "O",
+   "note": "Foot injury, Covers says he will miss the rest of the season (newly listed; he played through Nov 20).",
+   "src": "Covers, Sports Reference box scores"
+  },
+  "jake-davis-ill": {
+   "s": "O",
+   "note": "Separated shoulder, out indefinitely.",
+   "src": "Covers"
+  },
+  "jaylen-petty-ucla": {
+   "s": "D",
+   "note": "Lower body injury reported Nov 21; missed the Nov 22 game vs Delaware and is still listed as uncertain to play.",
+   "src": "Covers, Sports Reference box scores"
+  },
+  "jordan-scott-msu": {
+   "s": "D",
+   "note": "Shoulder injury reported Nov 20, uncertain to play; missed the Nov 21 game vs Detroit Mercy.",
+   "src": "Covers, Sports Reference box scores"
+  },
+  "luke-mceldon-nu": {
+   "s": "O",
+   "note": "Personal matter, out indefinitely.",
+   "src": "Covers"
+  },
+  "prince-alexander-moody-ind": {
+   "s": "D",
+   "note": "Knee injury, ruled out since Nov 2 with no return timeline; has not played this season.",
+   "src": "Covers, box scores"
+  },
+  "roberts-blums-psu": {
+   "s": "O",
+   "note": "Broken finger, expected to miss a few weeks.",
+   "src": "Covers"
+  },
+  "ryan-soulis-nu": {
+   "s": "O",
+   "note": "Foot, will miss an extended period.",
+   "src": "Covers"
+  },
+  "tyrone-riley-iv-ore": {
+   "s": "O",
+   "note": "Left hand, to be reevaluated about 4 weeks after Nov 5.",
+   "src": "Covers"
+  },
+  "wesley-yates-iii-uw": {
+   "s": "D",
+   "note": "Missed the Nov 23 and Nov 24 games after playing Nov 19; no reason reported.",
+   "src": "Sports Reference box scores"
+  }
+ }
+}
