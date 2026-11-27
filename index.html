@@ -246,6 +246,7 @@ details.rd[open] summary{border-bottom:1px solid var(--line2)}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:8px 16px;border-radius:5px;font-size:14px;z-index:20}
 .confirm{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--loss-soft);padding:8px 10px;border-radius:5px;margin-top:8px}
 .picklist{max-height:360px;overflow:auto;border:1px solid var(--line);border-radius:5px}
+.picklist .bi{display:flex;justify-content:space-between;gap:8px;padding:6px 12px;border-bottom:1px solid var(--line2);font-size:13.5px;background:var(--card)}
 .picklist button{display:flex;width:100%;justify-content:space-between;gap:8px;border:0;border-bottom:1px solid var(--line2);border-radius:0;text-align:left;background:var(--card)}
 .picklist button:hover{background:var(--accent-soft)}
 @media (max-width:640px){header.band{position:static}.navgrp{flex-wrap:wrap;flex:1 1 auto;row-gap:2px}nav.main{gap:2px 12px}.brand h1{font-size:22px}}
@@ -1068,7 +1069,7 @@ function vHome(){
 }
 
 function vDraftBoard(){
-  const ids=coachOrder();const n=ids.length;if(!ready())return dataNote()+head('Draft Board',`Nine-round ${draftTypeName()} draft. Each coach takes seven players, one team offense and one team defense.`)+noCoaches();
+  const ids=coachOrder();const n=ids.length;if(!ready())return draftWaiting();
   const picks=S.draft.picks||[];const total=n*9;
   const cell=i=>({rd:Math.floor(i/n),cid:pickCoach(i,ids)});
   let grid=`<div class="board" style="grid-template-columns:44px repeat(${n},minmax(130px,1fr))"><div class="h"></div>${ids.map(c=>`<div class="h">${esc(coachName(c))}${coachTeam(c)?`<div class="tiny" style="color:var(--band-ink2);text-transform:none;letter-spacing:0;font-family:var(--f-body)">${esc(coachTeam(c))}</div>`:''}</div>`).join('')}`;
@@ -1110,7 +1111,7 @@ function vDraftBoard(){
   const mineC=myCid();const stC=S.draft.clock?.state||'off';const onClockCid=picks.length<total?cell(picks.length).cid:null;
   const coachTurn=!S.admin&&mineC&&mineC===onClockCid&&stC!=='off';
   if(!S.admin&&mineC&&picks.length<total&&!coachTurn){let nx=-1;for(let i=picks.length;i<total;i++){if(cell(i).cid===mineC){nx=i;break}}
-    tools=`<div class="panel"><div class="eyebrow">Your team: ${esc(coachName(mineC))}</div>${stC==='off'&&!picks.length?'<p style="margin:6px 0 0">The draft has not started yet. Keep this page open; when it is your turn the pick list appears here.</p>':nx<0?'<p style="margin:6px 0 0">You have made all your picks.</p>':`<p style="margin:6px 0 0">Your next pick is <strong>#${nx+1}</strong>${nx===picks.length+1?' — <strong>you are on deck</strong>':` (${nx-picks.length} picks away)`}. Keep this page open; the pick list appears here when it is your turn.</p>`}${myDraftList(mineC)}</div>`}
+    tools=`<div class="panel"><div class="eyebrow">Your team: ${esc(coachName(mineC))}</div>${stC==='off'&&!picks.length?'<p style="margin:6px 0 0">The draft has not started yet. Keep this page open; when it is your turn the pick list appears here.</p>':nx<0?'<p style="margin:6px 0 0">You have made all your picks.</p>':`<p style="margin:6px 0 0">Your next pick is <strong>#${nx+1}</strong>${nx===picks.length+1?' — <strong>you are on deck</strong>':` (${nx-picks.length} picks away)`}. Keep this page open; the pick list appears here when it is your turn.</p>`}${myDraftList(mineC)}<details style="margin-top:10px"${S.browseOpen||S.pickFilter?' open':''} ontoggle="S.browseOpen=this.open"><summary class="small" style="cursor:pointer"><strong>Browse available players and teams</strong></summary>${browseList()}</details></div>`}
   if((S.admin||coachTurn)&&picks.length<total){
     const {cid}=cell(picks.length);const need=needs(cid);
     const own=ownerMap();const q=S.pickFilter.toLowerCase();
@@ -1149,6 +1150,25 @@ function processDraftReqs(){ // commissioner's page records a coach's pick when 
   const picks=S.draft.picks||[];const n=picks.length;if(n>=draftTotal())return;
   const cid=pickCoach(n,coachOrder());const uid=S.links[cid];if(!uid)return;const r=(S.coachlu[uid]||{}).dreq;
   if(!r||r.i!==n||!r.k)return;const key=uid+':'+n+':'+r.ts;if(S.dreqSeen===key)return;S.dreqSeen=key;makePick(r.k)}
+function availOpts(){const own=ownerMap();const q=(S.pickFilter||'').toLowerCase();const opts=[];
+  allPlayers().filter(p=>!own['P:'+p.id]).forEach(p=>{const x=pj(p.id);opts.push({t:`${p.name} ${p.team} ${T[p.team].n} ${p.pos}`,lab:`${esc(p.name)}${injTag(p.id)} <span class="muted small">${p.pos}${x?` · rank ${x.rk}`:''}</span>`,team:p.team,v:x?.fpg??0})});
+  TEAMS.filter(t=>!own['O:'+t.k]).forEach(t=>opts.push({t:`${t.n} ${t.k} offense`,lab:`${esc(t.n)} offense <span class="muted small">off rank ${TPROJ[t.k].ork}</span>`,team:t.k,v:TPROJ[t.k].ofp}));
+  TEAMS.filter(t=>!own['D:'+t.k]).forEach(t=>opts.push({t:`${t.n} ${t.k} defense`,lab:`${esc(t.n)} defense <span class="muted small">def rank ${TPROJ[t.k].drk}</span>`,team:t.k,v:TPROJ[t.k].dfp}));
+  return opts.filter(o=>!q||o.t.toLowerCase().includes(q)).sort((a,b)=>b.v-a.v)}
+function browseList(){const o=availOpts();return `<div class="row" style="margin:10px 0"><input id="pickQ" type="search" placeholder="Search players or teams (try a name, school, G, F, C, offense, defense)" value="${esc(S.pickFilter||'')}" style="flex:1"></div>
+  <div class="picklist">${o.slice(0,120).map(x=>`<div class="bi"><span>${x.lab}</span><span class="row" style="gap:8px"><span class="mono small">${x.v.toFixed(1)} FP/g</span>${chip(x.team)}</span></div>`).join('')||'<div class="small muted" style="padding:10px">Nothing matches.</div>'}</div>
+  <p class="tiny muted" style="margin:8px 0 0">${o.length} available, sorted by projected fantasy points per game. Tap a name in the <a href="#player-pool">Player Pool</a> for his game log.</p>`}
+function draftWaiting(){ // draft board before every coach has joined
+  const size=leagueSize()||EXPECTED||8;const ids=coachOrder();const open=Math.max(0,size-ids.length);const mine=myCid();
+  const cols=[...ids.map(c=>({n:coachName(c),t:coachTeam(c),me:c===mine})),...Array.from({length:open},()=>({open:true}))];
+  let grid=`<div class="board" style="grid-template-columns:44px repeat(${cols.length},minmax(130px,1fr))"><div class="h"></div>${cols.map(c=>`<div class="h">${c.open?'<span style="opacity:.6">Open spot</span>':esc(c.n)+(c.me?' <span class="tiny">(you)</span>':'')}${c.t&&!c.open?`<div class="tiny" style="color:var(--band-ink2);text-transform:none;letter-spacing:0;font-family:var(--f-body)">${esc(c.t)}</div>`:''}</div>`).join('')}`;
+  const N=cols.length;
+  for(let rd=0;rd<9;rd++){grid+=`<div class="rn">R${rd+1}${rev(rd)?' ←':' →'}</div>`;for(let col=0;col<N;col++){const i=rev(rd)?rd*N+(N-1-col):rd*N+col;grid+=`<div class="c"><div class="pk">${rd+1}.${String((i%N)+1).padStart(2,'0')} · #${i+1}</div></div>`}}
+  grid+='</div>';
+  const who=`<div class="panel"><h3 style="margin:0 0 6px">Waiting for coaches</h3><p style="margin:0"><strong>${ids.length} of ${size}</strong> coaches have joined${open?`, <strong>${open} spot${open===1?'':'s'} open</strong>`:''}. The board fills in as coaches join, and the draft can start once every spot is filled. ${S.admin?'Invite coaches and set the final draft order on the <a href="#commissioner">Commissioner</a> page.':mine?'You are in. The commissioner sets the final draft order before the draft.':'Not in yet? Join on the <a href="#home">Home</a> page.'}</p>
+    ${ids.length?`<p class="small muted" style="margin:6px 0 0">Joined so far: ${ids.map(c=>esc(coachName(c))+(coachTeam(c)?` (${esc(coachTeam(c))})`:'')).join(', ')}</p>`:''}</div>`;
+  return dataNote()+(S.cfg.draftAt?`<div class="notice" style="margin-bottom:12px">Draft scheduled for <strong>${fmtDraft(S.cfg.draftAt)}</strong>.</div>`:'')+head('Draft Board',`Nine round ${draftTypeName()} draft, ${size*9} picks, ${secTxt()}. Each coach takes seven players, one team offense and one team defense.`)
+    +`<div class="stack">${who}<div class="panel"><h3 style="margin:0">Available players and teams</h3><p class="small muted" style="margin:4px 0 0">Look ahead and plan your picks. When the draft starts, the coach on the clock picks from this list.</p>${browseList()}</div><div style="overflow-x:auto">${grid}</div></div>`}
 function needs(cid){const r=drafting()?draftRoster(cid,S.draft.picks||[]):rosterOf(cid);return {P:7-r.starters.length-r.reserves.length,O:r.off?0:1,D:r.def?0:1}}
 function head(t,s){return `<h2 class="vt">${t}</h2>${s?`<p class="vsub">${s}</p>`:''}`}
 
