@@ -284,6 +284,47 @@ def fill_round(doc, rnd, base, sched, box, match):
     return add_s, add_t, flags, through, waiting
 
 
+LOC2K = {'Illinois': 'ILL', 'Michigan State': 'MSU', 'Michigan': 'MICH', 'Nebraska': 'NEB', 'Ohio State': 'OSU', 'Purdue': 'PUR',
+         'Indiana': 'IND', 'Iowa': 'IOWA', 'Maryland': 'MD', 'Wisconsin': 'WIS', 'Oregon': 'ORE', 'Minnesota': 'MINN',
+         'Washington': 'UW', 'Rutgers': 'RUT', 'Northwestern': 'NU', 'Penn State': 'PSU'}
+
+
+def build_gamelog(box, sched, match, base, old):
+    """Game log file for the Game Log page: keeps past seasons as they are and rebuilds this season
+    (2027) from ESPN box scores. Row: [season, date, team, opponent, H/A/N, result, started, min,
+    pts, reb, ast, stl, blk, to, fp, conference game]."""
+    gl = {k: [r for r in v if r[0] != 2027] for k, v in old.items() if not k.startswith('_')}
+    conf = {(g['date'], g['away'], g['home']) for g in base['games']}
+    sc = sched.drop_duplicates('game_id').set_index('game_id')
+    b = played(box[box['team_id'].isin(ID2K.keys())]).copy()
+    b['pid'] = b['athlete_id'].astype(str).map(match)
+    b = b[b['pid'].notna()]
+    for _, x in b.iterrows():
+        gid = int(x['game_id'])
+        if gid not in sc.index:
+            continue
+        g = sc.loc[gid]
+        k, ok = ID2K[int(x['team_id'])], int(pd.to_numeric(x['opponent_team_id'], errors='coerce') or 0)
+        home = x['home_away'] == 'home'
+        ha = 'N' if bool(g['neutral_site']) else ('H' if home else 'A')
+        n = lambda c: num0(x[c])
+        fp = n('points') + 1.2 * n('rebounds') + 1.5 * n('assists') + 3 * n('steals') + 3 * n('blocks') - 3 * n('turnovers')
+        opp = str(x['opponent_team_location'])
+        opp = ID2K.get(ok, LOC2K.get(opp, opp)) if opp not in ('UCLA', 'USC') else opp
+        date = str(g['ymd'])
+        ak, hk = (ID2K.get(ok), k) if home else (k, ID2K.get(ok))
+        res = ('W ' if bool(x['team_winner']) else 'L ') + f"{num0(x['team_score'])}-{num0(x['opponent_team_score'])}"
+        gl.setdefault(x['pid'], []).append([2027, date, str(x['team_location']), opp, ha, res, int(bool(x['starter'])),
+                                            int(round(num0(x['minutes'], float))), n('points'), n('rebounds'), n('assists'),
+                                            n('steals'), n('blocks'), n('turnovers'), r1(fp), int((date, ak, hk) in conf)])
+    for k in gl:
+        gl[k].sort(key=lambda r: (r[0], r[1]))
+    done = sched[sched['status_type_completed'].fillna(False).astype(bool)]
+    bt = done[done['home_id'].isin(ID2K.keys()) | done['away_id'].isin(ID2K.keys())]
+    gl['_meta'] = {'asOf': mdY(dt.datetime.strptime(bt['ymd'].max(), '%Y-%m-%d')) if len(bt) else ''}
+    return gl
+
+
 # ---------------------------------------------------------------- main
 def main():
     ap = argparse.ArgumentParser()
@@ -389,6 +430,20 @@ def main():
                     players[k] = {**v, 'manual': False}
             writes.append(('league/injuries', {'asOf': feed.get('asOf', ''), 'updatedAt': feed['updatedAt'], 'players': players}, False))
             log(f'Injury report: {len(players)} tagged players (as of {feed.get("asOf", "")})')
+
+    # 6. game log file (a site file, committed by the workflow when it changes)
+    gl_path = os.path.join(ROOT, 'gamelog.json')
+    if os.path.isfile(gl_path):
+        old = json.load(open(gl_path))
+        gl = build_gamelog(box, sched, match, base, old)
+        if gl != old:
+            n27 = sum(1 for v in gl.values() if isinstance(v, list) for r in v if r[0] == 2027)
+            if a.dry_run:
+                log(f"[dry run] game log: {n27} games this season, through {gl['_meta']['asOf']}")
+            else:
+                with open(gl_path, 'w') as f:
+                    json.dump(gl, f, separators=(',', ':'), ensure_ascii=False)
+                log(f"Game log updated: {n27} games this season, through {gl['_meta']['asOf']}")
 
     # write
     if not writes:

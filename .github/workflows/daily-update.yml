@@ -15,7 +15,8 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write   # to save the rebuilt game log (gamelog.json)
+  pages: write      # to republish the website after saving it
 
 jobs:
   update:
@@ -36,3 +37,14 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: python sync/sync.py
+      - name: Save the game log
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- gamelog.json; then echo "Game log unchanged"; exit 0; fi
+          git config user.name "league-update"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add gamelog.json
+          git commit -q -m "Game log update"
+          for i in 1 2 3; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep 5; done
+          gh api -X POST "repos/${{ github.repository }}/pages/builds" --silent || echo "Pages rebuild request skipped"
