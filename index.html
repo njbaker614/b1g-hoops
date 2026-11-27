@@ -248,6 +248,7 @@ details.rd[open] summary{border-bottom:1px solid var(--line2)}
 .picklist{max-height:360px;overflow:auto;border:1px solid var(--line);border-radius:5px}
 .picklist button{display:flex;width:100%;justify-content:space-between;gap:8px;border:0;border-bottom:1px solid var(--line2);border-radius:0;text-align:left;background:var(--card)}
 .picklist button:hover{background:var(--accent-soft)}
+@media (max-width:640px){header.band{position:static}.navgrp{flex-wrap:wrap;flex:1 1 auto;row-gap:2px}nav.main{gap:2px 12px}.brand h1{font-size:22px}}
 @media (max-width:620px){.mu{grid-template-columns:1fr}.mu .vs{border-inline:0;border-block:1px solid var(--line2);padding:4px 14px}.mu .side.r{text-align:left}h2.vt{font-size:28px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
@@ -1096,7 +1097,8 @@ function vDraftBoard(){
   const setupBar=S.admin?`<div class="row" style="justify-content:space-between;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px">
     <a class="btn" href="#commissioner">← Back to league setup</a>
     <span class="small muted">${leagueSize()} teams · top ${playoffTeams()} make playoffs · ${draftTypeName()} draft · ${secTxt()}</span>
-    <span class="tiny muted">${picks.length?'Setup is locked. To change it, use Reset draft on the setup page.':'Nothing is locked until the first pick. You can still change any setup step.'}</span></div>`:'';
+    <span class="tiny muted">${picks.length?'Setup is locked. To change it, use Reset draft on the setup page.':'Nothing is locked until the first pick. You can still change any setup step.'}</span></div>
+    ${picks.length<total?`<div class="notice"><strong>Keep this page open during the draft.</strong> Coaches pick on their own phones, and their picks, the clock and auto picks run through this page. You can pick for anyone at any time below, pause, undo, or use Fix pick on the board.</div>`:''}`:'';
   if(picks.length<total){
     const {cid}=cell(picks.length);const c=S.draft.clock;const left=clockLeft();const st=c?.state||'off';
     const ctl=S.admin?(st==='off'?`<button class="pri" data-act="clockStart">${picks.length?'Start the clock':'Start the draft'}</button>`:st==='running'?`<button data-act="clockPause">Pause</button><button data-act="clockReset">Restart clock</button>${picks.length?'':'<button data-act="clockStop">Stop, not ready yet</button>'}`:`<button class="pri" data-act="clockResume">Resume</button><button data-act="clockReset">Restart clock</button>${picks.length?'':'<button data-act="clockStop">Stop, not ready yet</button>'}`)+(st!=='off'?`<button data-act="autoPick">Auto pick best available</button>`:''):'';
@@ -1105,7 +1107,11 @@ function vDraftBoard(){
       <div id="pickClock" class="mono" style="font-size:44px;line-height:1;${left===0?'color:var(--loss)':''}">${noLimit()?'<span style="font-size:22px">No time limit</span>':left==null?fmtClock(pickSec()*1000):left===0?"Time's up":fmtClock(left)}</div>
       ${ctl?`<div class="row">${ctl}</div>`:''}</div>`;
   }
-  if(S.admin&&picks.length<total){
+  const mineC=myCid();const stC=S.draft.clock?.state||'off';const onClockCid=picks.length<total?cell(picks.length).cid:null;
+  const coachTurn=!S.admin&&mineC&&mineC===onClockCid&&stC!=='off';
+  if(!S.admin&&mineC&&picks.length<total&&!coachTurn){let nx=-1;for(let i=picks.length;i<total;i++){if(cell(i).cid===mineC){nx=i;break}}
+    tools=`<div class="panel"><div class="eyebrow">Your team: ${esc(coachName(mineC))}</div>${stC==='off'&&!picks.length?'<p style="margin:6px 0 0">The draft has not started yet. Keep this page open; when it is your turn the pick list appears here.</p>':nx<0?'<p style="margin:6px 0 0">You have made all your picks.</p>':`<p style="margin:6px 0 0">Your next pick is <strong>#${nx+1}</strong>${nx===picks.length+1?' — <strong>you are on deck</strong>':` (${nx-picks.length} picks away)`}. Keep this page open; the pick list appears here when it is your turn.</p>`}${myDraftList(mineC)}</div>`}
+  if((S.admin||coachTurn)&&picks.length<total){
     const {cid}=cell(picks.length);const need=needs(cid);
     const own=ownerMap();const q=S.pickFilter.toLowerCase();
     const opts=[];
@@ -1113,13 +1119,36 @@ function vDraftBoard(){
     if(need.O>0)TEAMS.filter(t=>!own['O:'+t.k]).forEach(t=>opts.push({k:'O:'+t.k,t:`${t.n} ${t.k} offense`,pos:'OFF',av:t.k.slice(0,3),sq:1,lab:`${esc(t.n)} offense <span class="muted small">off rank ${TPROJ[t.k].ork}</span>`,team:t.k,v:TPROJ[t.k].ofp}));
     if(need.D>0)TEAMS.filter(t=>!own['D:'+t.k]).forEach(t=>opts.push({k:'D:'+t.k,t:`${t.n} ${t.k} defense`,pos:'DEF',av:t.k.slice(0,3),sq:1,lab:`${esc(t.n)} defense <span class="muted small">def rank ${TPROJ[t.k].drk}</span>`,team:t.k,v:TPROJ[t.k].dfp}));
     const shown=opts.filter(o=>!q||o.t.toLowerCase().includes(q)).sort((a,b)=>b.v-a.v).slice(0,80);
-    tools=`<div class="panel"><div class="row" style="justify-content:space-between"><h3 style="margin:0">Pick #${picks.length+1}: ${esc(coachName(cid))}</h3><span class="small muted">Needs ${need.P} player${need.P===1?'':'s'}${need.O?', offense':''}${need.D?', defense':''}</span></div>
-      <div class="row" style="margin:10px 0"><input id="pickQ" type="search" placeholder="Search players or teams" value="${esc(S.pickFilter)}" style="flex:1"> ${picks.length?'<button data-act="undoPick">Undo last pick</button>':''}</div>
-      ${need.P===0?`<div class="notice" style="margin-bottom:8px"><strong>Must pick:</strong> ${coachName(cid)} has all 7 players, so only ${need.O&&need.D?'team offenses and defenses':need.O?'team offenses':'team defenses'} are left to pick.</div>`:''}<div class="picklist">${shown.map(o=>`<button data-act="pick" data-k="${esc(o.k)}"${S.picking?' disabled':''}><span>${o.lab}</span><span class="row" style="gap:8px"><span class="mono small">${o.v.toFixed(1)} FP/g</span>${chip(o.team)}</span></button>`).join('')||'<div class="small muted" style="padding:10px">Nothing matches.</div>'}</div>
-      <p class="tiny muted" style="margin:8px 0 0">Sorted by projected fantasy points per game (see Player Pool and Team Pool for how they're built). Each pick fills the coach's starters, then reserves.</p></div>`;
+    const req=coachTurn?(S.coachlu[S.me]||{}).dreq:null;const pend=req&&req.i===picks.length?req:null;const paused=stC==='paused';
+    const coachTop=coachTurn?`<div class="notice" style="margin-bottom:10px">${paused?'<strong>The commissioner paused the draft.</strong> You can pick once it resumes.':pend?`<strong>Sending your pick: ${esc(itemText(pend.k))}…</strong> It shows on the board in a second or two. If it does not, tap a player again or let the commissioner know.`:'<strong>You are on the clock.</strong> Tap a player or team to draft it.'}</div>`:'';
+    tools=`<div class="panel" id="pickPanel">${coachTop}<div class="row" style="justify-content:space-between"><h3 style="margin:0">${coachTurn?'Your pick':'Pick'} #${picks.length+1}${coachTurn?'':': '+esc(coachName(cid))}</h3><span class="small muted">Needs ${need.P} player${need.P===1?'':'s'}${need.O?', offense':''}${need.D?', defense':''}</span></div>
+      <div class="row" style="margin:10px 0"><input id="pickQ" type="search" placeholder="Search players or teams" value="${esc(S.pickFilter)}" style="flex:1"> ${picks.length&&S.admin?'<button data-act="undoPick">Undo last pick</button>':''}</div>
+      ${need.P===0?`<div class="notice" style="margin-bottom:8px"><strong>Must pick:</strong> ${coachName(cid)} has all 7 players, so only ${need.O&&need.D?'team offenses and defenses':need.O?'team offenses':'team defenses'} are left to pick.</div>`:''}<div class="picklist">${shown.map(o=>`<button data-act="pick" data-k="${esc(o.k)}"${S.picking||(coachTurn&&paused)?' disabled':''}><span>${o.lab}</span><span class="row" style="gap:8px"><span class="mono small">${o.v.toFixed(1)} FP/g</span>${chip(o.team)}</span></button>`).join('')||'<div class="small muted" style="padding:10px">Nothing matches.</div>'}</div>
+      <p class="tiny muted" style="margin:8px 0 0">Sorted by projected fantasy points per game (see Player Pool and Team Pool for how they're built). Each pick fills the coach's starters, then reserves.</p>${coachTurn?myDraftList(mineC):''}</div>`;
   }else if(S.admin&&picks.length>=total){tools=`<div class="notice">Draft complete. Make roster moves on the <a href="#rosters">Roster Summary</a>. <button class="ghost" data-act="undoPick">Undo last pick</button></div>`}
   return dataNote()+(draftWhen()?`<div class="notice" style="margin-bottom:12px">Draft scheduled for <strong>${fmtDraft(draftWhen())}</strong>.</div>`:'')+head('Draft Board',`Nine-round ${draftTypeName()} draft, ${total} picks, ${secTxt()}. ${picks.length>=total?'The draft is complete.':picks.length?`${picks.length} of ${total} picks made.`:'Draft order is set on the Commissioner page.'}`)+`<div class="stack">${setupBar}${fixBox}${clockBox}${tools}<div style="overflow-x:auto">${grid}</div></div>`;
 }
+function myDraftList(cid){const r=draftRoster(cid,S.draft.picks||[]);const it=[...r.starters,...r.reserves].map(id=>`<li>${esc(P()[id]?.name||id)} <span class="tiny muted">${P()[id]?.team||''}</span></li>`);
+  if(r.off)it.push(`<li>${esc(T[r.off].n)} offense</li>`);if(r.def)it.push(`<li>${esc(T[r.def].n)} defense</li>`);
+  return `<details style="margin-top:10px"${it.length?' open':''}><summary class="small" style="cursor:pointer"><strong>Your roster so far</strong> (${it.length} of 9)</summary>${it.length?`<ol class="small" style="margin:6px 0 0;padding-left:20px">${it.join('')}</ol>`:'<p class="small muted" style="margin:6px 0 0">No picks yet.</p>'}</details>`}
+async function requestPick(k){
+  if(S.preview){toast('Preview only: nothing was saved');return}
+  const picks=S.draft.picks||[];const i=picks.length;const cid=pickCoach(i,coachOrder());
+  if(!S.me||myCid()!==cid){toast('It is not your turn.');return}
+  if(S.draft.clock?.state==='paused'){toast('The draft is paused.');return}
+  if(picks.some(p=>p.k===k)||ownerMap()[k]){toast(`${itemText(k)} is already drafted.`);return}
+  const [t]=k.split(':');const nd=needs(cid);
+  if(t==='P'&&nd.P<=0){toast('You have 7 players. Pick a team offense or defense.');return}
+  if(t==='O'&&!nd.O){toast('You already have an offense.');return}
+  if(t==='D'&&!nd.D){toast('You already have a defense.');return}
+  const doc={...(S.coachlu[S.me]||{}),dreq:{i,k,ts:Date.now()}};S.coachlu={...S.coachlu,[S.me]:doc};render();
+  try{await db.doc('coachlu/'+S.me).set(doc);toast(`Pick sent: ${itemText(k)}`)}catch(e){toast('Could not send your pick. Check your connection and tap again.');console.error(e)}
+}
+function processDraftReqs(){ // commissioner's page records a coach's pick when it is that coach's turn
+  if(!S.admin||S.preview||!db||S.picking)return;const c=S.draft.clock;if(!c||c.state!=='running')return;
+  const picks=S.draft.picks||[];const n=picks.length;if(n>=draftTotal())return;
+  const cid=pickCoach(n,coachOrder());const uid=S.links[cid];if(!uid)return;const r=(S.coachlu[uid]||{}).dreq;
+  if(!r||r.i!==n||!r.k)return;const key=uid+':'+n+':'+r.ts;if(S.dreqSeen===key)return;S.dreqSeen=key;makePick(r.k)}
 function needs(cid){const r=drafting()?draftRoster(cid,S.draft.picks||[]):rosterOf(cid);return {P:7-r.starters.length-r.reserves.length,O:r.off?0:1,D:r.def?0:1}}
 function head(t,s){return `<h2 class="vt">${t}</h2>${s?`<p class="vsub">${s}</p>`:''}`}
 
@@ -1612,7 +1641,7 @@ V.addEventListener('click',async e=>{
   if(a==='reset'){S.confirm='reset';render()}
   if(a==='cancel'){S.confirm=null;render()}
   if(a==='resetGo'){S.confirm=null;await write(async()=>{await db.doc('league/draft').set({picks:[]});for(const c of S.cfg.coaches)await setRoster(c.id,emptyRoster());for(const c of [...(S.changes||[])])if(c._id)await db.doc('changes/'+c._id).delete();for(const [u,d] of Object.entries(S.coachlu||{}))if(d?.hist?.length)await db.doc('coachlu/'+u).set({...d,hist:[]})},'Draft cleared, rosters emptied and roster changes reset')}
-  if(a==='pick'){await makePick(b.dataset.k)}
+  if(a==='pick'){if(S.admin)await makePick(b.dataset.k);else await requestPick(b.dataset.k)}
   if(a==='editPick'){S.editPick=+b.dataset.i;S.fixFilter='';render();window.scrollTo(0,0);return}
   if(a==='cancelFix'){S.editPick=null;render();return}
   if(a==='fixPick'){await fixPick(S.editPick,b.dataset.k);return}
@@ -1766,7 +1795,17 @@ async function saveRound(final){
 
 setInterval(()=>{const c=S.draft.clock;const n=(S.draft.picks||[]).length;
   if(S.admin&&!S.preview&&db&&c&&c.state==='running'&&!noLimit()&&!S.picking&&n<draftTotal()&&Date.now()>c.start+pickSec()*1000+800&&S.autoFired!==n+':'+c.start){S.autoFired=n+':'+c.start;const k=bestAvailable();if(k){const cid=pickCoach(n,coachOrder());toast(`Time's up. Auto pick for ${coachName(cid)}: ${itemText(k)}`);makePick(k)}}
+  processDraftReqs();draftAlerts();
   },500);
+let TITLE0=null,wakeL=null;
+function draftAlerts(){const picks=S.draft.picks||[];const st=S.draft.clock?.state||'off';const live=st!=='off'&&picks.length<draftTotal()&&picks.length<(coachOrder().length*9);
+  const mine=myCid();const up=live&&mine&&!S.admin&&pickCoach(picks.length,coachOrder())===mine;
+  if(TITLE0==null)TITLE0=document.title;
+  if(up){document.title=(Math.floor(Date.now()/1000)%2)?'⏰ Your pick!':TITLE0;if(S.wasUp!==picks.length){S.wasUp=picks.length;try{navigator.vibrate&&navigator.vibrate([250,120,250])}catch(e){}toast('You are on the clock!')}}
+  else if(document.title!==TITLE0)document.title=TITLE0;
+  const want=live&&(mine||S.admin)&&document.visibilityState==='visible';
+  if(want&&!wakeL&&navigator.wakeLock){wakeL='pending';navigator.wakeLock.request('screen').then(l=>{wakeL=l;l.addEventListener('release',()=>{wakeL=null})}).catch(()=>{wakeL=null})}
+  else if(!want&&wakeL&&wakeL!=='pending'){try{wakeL.release()}catch(e){}wakeL=null}}
 setInterval(()=>{const el=document.getElementById('pickClock');if(!el)return;const left=clockLeft();if(left==null)return;el.textContent=left===0?"Time's up":fmtClock(left);el.style.color=left===0?'var(--loss)':left<=10000?'var(--warn)':''},250);
 /* ===================== Data wiring ===================== */
 (async function boot(){
