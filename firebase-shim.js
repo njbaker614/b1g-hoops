@@ -3,7 +3,7 @@
    so the hub page itself did not need rewriting. Settings live in firebase-config.js. */
 (function(){
   const V='10.12.2';const CDN=`https://www.gstatic.com/firebasejs/${V}/`;
-  let ready=null;
+  let ready=null;let holdReload=false;
   const INVITE=(()=>{try{return new URLSearchParams(location.search).get('invite')||''}catch(e){return ''}})();
   const dropInvite=()=>{try{if(INVITE){const u=new URL(location.href);u.searchParams.delete('invite');history.replaceState(null,'',u.pathname+u.search+u.hash)}}catch(e){}};
   const clean=v=>JSON.parse(JSON.stringify(v));
@@ -15,7 +15,7 @@
       const [{initializeApp},fs,au]=await Promise.all([import(CDN+'firebase-app.js'),import(CDN+'firebase-firestore.js'),import(CDN+'firebase-auth.js')]);
       const app=initializeApp(cfg);const F=fs.getFirestore(app);const A=au.getAuth(app);
       const user=await new Promise(r=>{const un=au.onAuthStateChanged(A,u=>{un();r(u)})});
-      au.onAuthStateChanged(A,u=>{if((u&&u.uid)!==(user&&user.uid))location.reload()});
+      au.onAuthStateChanged(A,u=>{if(!holdReload&&(u&&u.uid)!==(user&&user.uid))location.reload()});
       let admins=null,member=false;
       if(user){
         try{const s=await fs.getDoc(fs.doc(F,'meta/admins'));admins=s.exists()?(s.data().uids||[]):null}catch(e){admins=[]}
@@ -56,13 +56,14 @@
       let h='';
       if(state==='nocfg')h=`<div id="fbBar" style="${css}">Database not connected yet (firebase-config.js is empty). Showing preseason data only.</div>`;
       else if(state==='err')h=`<div id="fbBar" style="${css}">Could not connect: ${msg.replace(/</g,'&lt;')}</div>`;
-      else if(state==='out')h=`<div id="fbBar" style="${css}"><span>${INVITE?"<strong>You're invited to the league.</strong> Sign in with Google to join.":'Sign in to see the league and set your lineup.'}</span><button id="fbIn" style="${btn}">Sign in with Google</button></div>`;
+      else if(state==='out')h=`<div id="fbBar" style="${css}"><span>${INVITE?"<strong>You're invited to the league.</strong> Sign in to join.":'Sign in to see the league and set your lineup.'}</span><button id="fbIn" style="${btn}">Sign in with Google</button><button id="fbEm" style="${ghost}">Use email instead</button></div>`;
       else{const u=ctx.user;const adm=ctx.admins&&ctx.admins.includes(u.uid);
         const nm=(u.displayName||u.email||'Signed in').replace(/</g,'&lt;');
         if(!ctx.member&&ctx.admins!==null)h=`<div id="fbBar" style="${css}"><span><strong>This league is private.</strong> Enter the league password from the commissioner.</span><input id="fbCode" type="password" autocomplete="off" placeholder="League password" value="${INVITE.replace(/[&<>"]/g,'')}" style="padding:6px 8px;border-radius:6px;border:0;font:500 13px system-ui;min-width:150px"><button id="fbJoin" style="${btn}">Enter league</button><button id="fbOut" style="${ghost}">Sign out</button><span id="fbCodeMsg" style="flex-basis:100%;color:#FFC9A8;display:none"></span></div>`;
         else h=`<div id="fbBar" style="${css}"><span>${nm}${adm?' · Commissioner':''}</span>${ctx.admins===null?`<button id="fbClaim" style="${btn}">I am the commissioner</button>`:''}${adm?`<button id="fbPw" style="${ghost}">League password</button>`:''}<button id="fbOut" style="${ghost}">Sign out</button></div>`}
       b=el(h);document.body.appendChild(b);
       b.querySelector('#fbIn')?.addEventListener('click',async()=>{const c=await init();try{await c.au.signInWithPopup(c.A,new c.au.GoogleAuthProvider())}catch(e){alert('Sign in failed: '+e.message)}});
+      b.querySelector('#fbEm')?.addEventListener('click',()=>emailPanel());
       b.querySelector('#fbOut')?.addEventListener('click',async()=>{await ctx.au.signOut(ctx.A)});
       const jb=b.querySelector('#fbJoin');
       if(jb){const inp=b.querySelector('#fbCode'),m=b.querySelector('#fbCodeMsg');
@@ -72,9 +73,53 @@
           catch(e){m.style.display='block';m.textContent='That password is not right. Check with the commissioner and try again.';jb.disabled=false;jb.textContent='Enter league'}};
         jb.addEventListener('click',tryJoin);inp.addEventListener('keydown',e=>{if(e.key==='Enter')tryJoin()});if(INVITE)setTimeout(tryJoin,0)}
       b.querySelector('#fbPw')?.addEventListener('click',()=>pwPanel(ctx));
-      b.querySelector('#fbClaim')?.addEventListener('click',async()=>{if(!confirm('Make this Google account the league commissioner? Only the first person can do this.'))return;try{await ctx.fs.setDoc(ctx.fs.doc(ctx.F,'meta/admins'),{uids:[ctx.user.uid]});location.reload()}catch(e){alert('Could not set commissioner: '+e.message)}});
+      b.querySelector('#fbClaim')?.addEventListener('click',async()=>{if(!confirm('Make this account the league commissioner? Only the first person can do this.'))return;try{await ctx.fs.setDoc(ctx.fs.doc(ctx.F,'meta/admins'),{uids:[ctx.user.uid]});location.reload()}catch(e){alert('Could not set commissioner: '+e.message)}});
     };
     if(document.body)go();else document.addEventListener('DOMContentLoaded',go);
+  }
+  /* Email and password sign in, for people without a Google account */
+  function emailPanel(){
+    document.getElementById('fbEmPanel')?.remove();
+    const inp='width:100%;padding:8px;border:1px solid #bbb;border-radius:6px;font:500 14px system-ui;box-sizing:border-box;margin-top:3px';
+    const lab='display:block;margin-top:8px;font-size:12px;color:#444';
+    const p=el(`<div id="fbEmPanel" role="dialog" aria-label="Sign in with email" style="position:fixed;right:12px;top:12px;z-index:10000;background:#fff;color:#111;border:2px solid #0E2A47;font:500 13px/1.4 system-ui,sans-serif;padding:14px;border-radius:10px;width:min(360px,calc(100vw - 24px));max-height:calc(100vh - 110px);overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.25)">
+      <div style="display:flex;justify-content:space-between;align-items:center"><strong id="fbEmTitle">Sign in with email</strong><button id="fbEmX" style="border:0;background:none;font-size:18px;cursor:pointer" aria-label="Close">×</button></div>
+      <div style="display:flex;gap:6px;margin-top:8px"><button id="fbEmTabIn" data-on="1" style="flex:1;padding:6px;border-radius:6px;border:1px solid #0E2A47;font:600 13px system-ui;cursor:pointer">Sign in</button><button id="fbEmTabNew" style="flex:1;padding:6px;border-radius:6px;border:1px solid #0E2A47;font:600 13px system-ui;cursor:pointer">Create account</button></div>
+      <label id="fbEmNameL" style="${lab};display:none">Your name<input id="fbEmName" autocomplete="name" style="${inp}" maxlength="40" placeholder="First and last name"></label>
+      <label style="${lab}">Email<input id="fbEmAddr" type="email" autocomplete="email" style="${inp}" placeholder="you@example.com"></label>
+      <label style="${lab}">Password<input id="fbEmPw" type="password" autocomplete="current-password" style="${inp}" placeholder="At least 6 characters"></label>
+      <button id="fbEmGo" style="margin-top:12px;width:100%;background:#E8702A;color:#fff;border:0;border-radius:6px;padding:9px;font:600 14px system-ui;cursor:pointer">Sign in</button>
+      <div id="fbEmMsg" style="margin-top:8px;color:#B3261E;display:none"></div>
+      <button id="fbEmReset" style="margin-top:6px;background:none;border:0;color:#0E2A47;text-decoration:underline;font:500 12px system-ui;cursor:pointer;padding:0">Forgot password?</button>
+      <div style="color:#666;font-size:12px;margin-top:8px">Any email works. This is only your sign in; you still need the league invite link or password to get into the league.</div></div>`);
+    document.body.appendChild(p);
+    let mode='in';const $=id=>p.querySelector('#'+id);const msg=(t,ok)=>{const m=$('fbEmMsg');m.style.display=t?'block':'none';m.style.color=ok?'#1B6E3A':'#B3261E';m.textContent=t||''};
+    const setMode=m=>{mode=m;const nw=m==='new';$('fbEmNameL').style.display=nw?'block':'none';$('fbEmTitle').textContent=nw?'Create an account with email':'Sign in with email';
+      $('fbEmGo').textContent=nw?'Create account':'Sign in';$('fbEmReset').style.display=nw?'none':'inline';$('fbEmPw').autocomplete=nw?'new-password':'current-password';
+      [['fbEmTabIn',!nw],['fbEmTabNew',nw]].forEach(([id,on])=>{$(id).style.background=on?'#0E2A47':'#fff';$(id).style.color=on?'#fff':'#0E2A47'});msg('')};
+    setMode('in');
+    $('fbEmX').addEventListener('click',()=>p.remove());$('fbEmTabIn').addEventListener('click',()=>setMode('in'));$('fbEmTabNew').addEventListener('click',()=>setMode('new'));
+    const why=e=>{const c=(e&&e.code)||'';
+      if(c==='auth/operation-not-allowed')return 'Email sign in is not turned on yet. Ask the commissioner to turn it on in Firebase.';
+      if(c==='auth/invalid-credential'||c==='auth/wrong-password'||c==='auth/user-not-found'||c==='auth/invalid-login-credentials')return 'That email and password do not match. Check them, or tap Create account if you are new.';
+      if(c==='auth/email-already-in-use')return 'That email already has an account. Tap Sign in instead (or Forgot password).';
+      if(c==='auth/weak-password')return 'Use a password with at least 6 characters.';
+      if(c==='auth/invalid-email'||c==='auth/missing-email')return 'Enter a valid email address.';
+      if(c==='auth/too-many-requests')return 'Too many tries. Wait a few minutes and try again.';
+      if(c==='auth/network-request-failed')return 'No connection. Check your internet and try again.';
+      return 'Something went wrong: '+((e&&e.message)||e)};
+    const go=async()=>{const email=$('fbEmAddr').value.trim(),pw=$('fbEmPw').value,name=$('fbEmName').value.trim();
+      if(!email){msg('Enter your email.');return}if(!pw){msg('Enter a password.');return}if(mode==='new'&&!name){msg('Enter your name so the league knows who you are.');return}
+      const c=await init();if(!c){msg('Could not connect. Try again.');return}
+      const btn=$('fbEmGo');btn.disabled=true;btn.textContent='One moment…';holdReload=true;
+      try{if(mode==='new'){const r=await c.au.createUserWithEmailAndPassword(c.A,email,pw);await c.au.updateProfile(r.user,{displayName:name})}
+        else await c.au.signInWithEmailAndPassword(c.A,email,pw);
+        location.reload()}
+      catch(e){holdReload=false;msg(why(e));btn.disabled=false;btn.textContent=mode==='new'?'Create account':'Sign in'}};
+    $('fbEmGo').addEventListener('click',go);[$('fbEmAddr'),$('fbEmPw'),$('fbEmName')].forEach(i=>i.addEventListener('keydown',e=>{if(e.key==='Enter')go()}));
+    $('fbEmReset').addEventListener('click',async()=>{const email=$('fbEmAddr').value.trim();if(!email){msg('Type your email above first, then tap Forgot password.');return}
+      const c=await init();try{await c.au.sendPasswordResetEmail(c.A,email);msg('If that email has an account, a reset link is on its way. Check your inbox and spam folder.',true)}catch(e){msg(why(e))}});
+    setTimeout(()=>$('fbEmAddr').focus(),0);
   }
   /* Commissioner: set the league password and see or remove members */
   async function pwPanel(c,first){
@@ -84,7 +129,7 @@
     let mem=[];try{const q=await c.fs.getDocs(c.fs.collection(c.F,'members'));mem=q.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.ts||0)-(b.ts||0))}catch(e){}
     const p=el(`<div id="fbPwPanel" style="position:fixed;right:12px;top:12px;z-index:10000;background:#fff;color:#111;border:2px solid #0E2A47;font:500 13px/1.4 system-ui,sans-serif;padding:14px;border-radius:10px;width:min(380px,calc(100vw - 24px));max-height:calc(100vh - 110px);overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.25)">
       <div style="display:flex;justify-content:space-between;align-items:center"><strong>League password</strong><button id="fbPwX" style="border:0;background:none;font-size:18px;cursor:pointer" aria-label="Close">×</button></div>
-      <div style="color:#555;margin:4px 0 8px">${first?'<strong style="color:#B3261E">No password set yet.</strong> Nobody but you can get in until you set one. ':''}People enter this once after signing in with Google. Share it only with your league. It is not case sensitive.</div>
+      <div style="color:#555;margin:4px 0 8px">${first?'<strong style="color:#B3261E">No password set yet.</strong> Nobody but you can get in until you set one. ':''}People enter this once after signing in. Share it only with your league. It is not case sensitive.</div>
       <div style="display:flex;gap:6px"><input id="fbPwIn" value="${esc(cur)}" placeholder="e.g. hoosierhoops27" style="flex:1;padding:7px 8px;border:1px solid #bbb;border-radius:6px;font:500 13px system-ui"><button id="fbPwSave" style="background:#E8702A;color:#fff;border:0;border-radius:6px;padding:7px 12px;font:600 13px system-ui;cursor:pointer">Save</button></div>
       <div id="fbPwMsg" style="margin-top:6px;color:#555"></div>
       <div style="margin-top:12px"><strong>Members (${mem.length})</strong> <span style="color:#555">· people who entered the password. You are always in as commissioner.</span></div>

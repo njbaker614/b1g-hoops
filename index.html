@@ -987,7 +987,7 @@ function renderNav(){
   document.getElementById('nav').innerHTML=NAV.map(([g,items])=>`<div class="navgrp">${g?`<span class="lbl">${g}</span>`:''}${items.map(([h,l])=>`<a href="#${h}"${cur===h?' aria-current="page"':''}>${l}</a>`).join('')}</div>`).join('');
 }
 function dataNote(){
-  if(S.dbOK===false)return `<div class="notice warn" style="margin-bottom:16px">League data (coaches, draft, rosters, results) shows once you sign in with Google and enter the league password from the commissioner (box at the bottom right). The rules, schedule and player pool are below.</div>`;
+  if(S.dbOK===false)return `<div class="notice warn" style="margin-bottom:16px">League data (coaches, draft, rosters, results) shows once you sign in (Google or any email) and enter the league password from the commissioner (box at the bottom right). The rules, schedule and player pool are below.</div>`;
   if(S.dbOK&&!S.loaded)return `<div class="notice" style="margin-bottom:16px" id="loadNote">Loading league data…</div>`;
   return '';
 }
@@ -1454,7 +1454,7 @@ const SITE_URL='https://njbaker614.github.io/b1g-hoops/';const ON_SITE=/github\.
 function inviteLink(){return S.joinCode?SITE_URL+'?invite='+encodeURIComponent(S.joinCode):SITE_URL}
 function inviteMsg(){const size=leagueSize()||EXPECTED||8;const open=Math.max(0,size-S.cfg.coaches.length);const dw=draftWhen();
   return `You're invited to ${S.cfg.name||'our league'}, our Big Ten men's basketball fantasy league! ${open} of ${size} spots are open, first come first served.\n\n`+
-  `1. Tap this link: ${inviteLink()}\n2. Sign in with Google\n3. Type your team name and tap Join the league\n\n`+
+  `1. Tap this link: ${inviteLink()}\n2. Sign in with Google, or tap Use email instead to sign in with any email\n3. Type your team name and tap Join the league\n\n`+
   (S.joinCode?`If it asks for the league password, it's: ${S.joinCode}\n\n`:'')+(dw?`Draft: ${fmtDraft(dw)}\n\n`:'')+`Text me if you have any trouble.`}
 function invitePanel(){
   if(ON_SITE&&db&&S.joinCode===undefined){S.joinCode=null;db.doc('secret/league').get().then(d=>{S.joinCode=d.exists?(d.data().code||''):'';render()}).catch(()=>{S.joinCode=''})}
@@ -1467,7 +1467,7 @@ function invitePanel(){
   return `<div class="panel" id="invitePanel"><h3>Invite coaches</h3><p style="margin:0">${status}</p>${pw}
   <label class="f" style="margin-top:10px">Invite link<input id="invLink" readonly value="${esc(inviteLink())}" onclick="this.select()"></label>
   <div class="row" style="margin-top:8px;flex-wrap:wrap;gap:8px"><button data-act="invCopyLink">Copy invite link</button><button class="ghost" data-act="invCopyMsg">Copy invite message</button>${navigator.share?'<button class="ghost" data-act="invShare">Share…</button>':''}</div>
-  <p class="muted" style="margin:8px 0 0;font-size:13px">Whoever opens the link signs in with Google, gets into the league without typing the password, then picks his team name and coach name. Anyone you didn't invite can be removed with the League password button.</p></div>`}
+  <p class="muted" style="margin:8px 0 0;font-size:13px">Whoever opens the link signs in (Google or any email), gets into the league without typing the password, then picks his team name and coach name. Anyone you didn't invite can be removed with the League password button.</p></div>`}
 function vCommish(){
   if(!S.admin)return dataNote()+head('Commissioner','League setup and approvals.')+`<div class="empty"><strong>Commissioner only</strong>The league owner and editors manage coaches, the draft and results here. Everyone else can follow along on the other pages.</div>`;
   const cs=S.cfg.coaches;const started=(S.draft.picks||[]).length>0;const ord=coachOrder();const pl=plan(leagueSize());
