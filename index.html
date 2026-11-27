@@ -1450,12 +1450,31 @@ function coachAccountsPanel(){const cs=S.cfg.coaches;if(!cs.length)return '';con
   ${S.me&&!myCid()&&!S.preview?`<div class="row" style="gap:8px;margin:0 0 10px;flex-wrap:wrap"><span class="small"><strong>You coach a team too?</strong> Link your own account:</span><select id="linkMeSel">${cs.filter(c=>!S.links[c.id]).map(c=>`<option value="${c.id}">${esc(c.team||c.name)} · ${esc(c.name)}</option>`).join('')}</select><button data-act="linkMe">Link my team</button></div>`:''}
   <div class="row" style="gap:8px;margin:0 0 10px"><select id="prevSel">${cs.map(c=>`<option value="${c.id}">${esc(c.team||c.name)} · ${esc(c.name)}</option>`).join('')}</select><button class="ghost" data-act="previewGo">Preview as coach</button></div>
   <div class="tw"><table><thead><tr><th>Team</th><th>Coach</th><th>Signed in account</th><th></th></tr></thead><tbody>${cs.map(c=>{const u=S.links[c.id];return `<tr><td>${esc(c.team||'')}</td><td>${esc(c.name)}</td><td>${u?nm(u):'<span class="muted">Not linked</span>'}</td><td>${u?`<button class="ghost" data-act="claimUnlink" data-c="${c.id}">Unlink</button>`:''}</td></tr>`}).join('')}</tbody></table></div></div>`}
+const SITE_URL='https://njbaker614.github.io/b1g-hoops/';const ON_SITE=/github\.io$/i.test(location.hostname);
+function inviteLink(){return S.joinCode?SITE_URL+'?invite='+encodeURIComponent(S.joinCode):SITE_URL}
+function inviteMsg(){const size=leagueSize()||EXPECTED||8;const open=Math.max(0,size-S.cfg.coaches.length);const dw=draftWhen();
+  return `You're invited to ${S.cfg.name||'our league'}, our Big Ten men's basketball fantasy league! ${open} of ${size} spots are open, first come first served.\n\n`+
+  `1. Tap this link: ${inviteLink()}\n2. Sign in with Google\n3. Type your team name and tap Join the league\n\n`+
+  (S.joinCode?`If it asks for the league password, it's: ${S.joinCode}\n\n`:'')+(dw?`Draft: ${fmtDraft(dw)}\n\n`:'')+`Text me if you have any trouble.`}
+function invitePanel(){
+  if(ON_SITE&&db&&S.joinCode===undefined){S.joinCode=null;db.doc('secret/league').get().then(d=>{S.joinCode=d.exists?(d.data().code||''):'';render()}).catch(()=>{S.joinCode=''})}
+  const size=leagueSize()||EXPECTED||8;const filled=S.cfg.coaches.length;const open=Math.max(0,size-filled);const started=(S.draft.picks||[]).length>0;
+  const pw=!ON_SITE?`<p class="muted" style="margin:6px 0 0">The league runs on the website, which is where people join. Its link is below; set the league password there with the <strong>League password</strong> button.</p>`
+    :S.joinCode===null?`<p class="muted" style="margin:6px 0 0">Loading the password…</p>`
+    :S.joinCode?`<p style="margin:6px 0 0">League password: <strong>${esc(S.joinCode)}</strong> <span class="muted">· built into the invite link, so people only type it if they open the plain link.</span></p>`
+    :`<p class="notice warn" style="margin:6px 0 0">No league password yet. Set one with the <strong>League password</strong> button at the bottom right, then come back here.</p>`;
+  const status=started?'The draft has started, so joining is closed.':open?`${filled} of ${size} spots filled · <strong>${open} open</strong>`:`All ${size} spots are filled.`;
+  return `<div class="panel" id="invitePanel"><h3>Invite coaches</h3><p style="margin:0">${status}</p>${pw}
+  <label class="f" style="margin-top:10px">Invite link<input id="invLink" readonly value="${esc(inviteLink())}" onclick="this.select()"></label>
+  <div class="row" style="margin-top:8px;flex-wrap:wrap;gap:8px"><button data-act="invCopyLink">Copy invite link</button><button class="ghost" data-act="invCopyMsg">Copy invite message</button>${navigator.share?'<button class="ghost" data-act="invShare">Share…</button>':''}</div>
+  <p class="muted" style="margin:8px 0 0;font-size:13px">Whoever opens the link signs in with Google, gets into the league without typing the password, then picks his team name and coach name. Anyone you didn't invite can be removed with the League password button.</p></div>`}
 function vCommish(){
   if(!S.admin)return dataNote()+head('Commissioner','League setup and approvals.')+`<div class="empty"><strong>Commissioner only</strong>The league owner and editors manage coaches, the draft and results here. Everyone else can follow along on the other pages.</div>`;
   const cs=S.cfg.coaches;const started=(S.draft.picks||[]).length>0;const ord=coachOrder();const pl=plan(leagueSize());
   return dataNote()+head('Commissioner','League setup. Changes save for everyone viewing the league. Every step stays editable until the first draft pick.')+`${(S.draft.picks||[]).length?`<div class="notice" style="margin-bottom:16px">The draft has started, so league size, playoff teams, coaches and draft settings are locked. Season format can still change. To change them, use <strong>Reset draft</strong> at the bottom of this page, which clears all picks.</div>`:''}<div class="grid g2">
   <div class="panel"><h3>League</h3><div class="row"><label class="f" style="flex:1">League name<input id="lgN" value="${esc(S.cfg.name)}"></label><button data-act="saveName" style="align-self:flex-end">Save</button></div>
 </div>
+  ${invitePanel()}
   ${injuryPanel()}
   ${coachAccountsPanel()}
   ${sizePanel(started)}
@@ -1550,6 +1569,10 @@ V.addEventListener('click',async e=>{
   if(a==='glog'){S.glP=b.dataset.p;if(location.hash==='#game-log')render();return}
   if(a==='joinLeague'){if(!db||!S.me)return;if((S.draft.picks||[]).length){toast('The draft has started, so new coaches cannot join.');return}const t=document.getElementById('joinTeam').value.trim().slice(0,40),n=document.getElementById('joinName').value.trim().slice(0,40);if(!t){toast('Give your team a name.');return}
     const size=leagueSize()||EXPECTED;if(size&&S.cfg.coaches.length>=size){toast('The league is full.');render();return}const prev=S.coachlu[S.me]||{};const doc={...prev,join:true,cid:'j_'+S.me,name:n,team:t,claimedAt:Date.now(),hist:[]};S.coachlu={...S.coachlu,[S.me]:doc};refreshNames();S.rosterView=doc.cid;render();await write(()=>db.doc('coachlu/'+S.me).set(doc),`Welcome, ${t} joined the league`);return}
+  if(a==='invCopyLink'||a==='invCopyMsg'){const t=a==='invCopyLink'?inviteLink():inviteMsg();
+    try{await navigator.clipboard.writeText(t);toast(a==='invCopyLink'?'Invite link copied':'Invite message copied')}
+    catch(e){const i=document.getElementById('invLink');if(a==='invCopyLink'&&i){i.select();toast('Press Ctrl+C (or long press) to copy')}else{window.prompt('Copy this invite message:',t)}}return}
+  if(a==='invShare'){try{await navigator.share({title:S.cfg.name||'Fantasy league invite',text:inviteMsg()})}catch(e){}return}
   if(a==='joinCancel'){if(!db||!S.me)return;const c={...S.coachlu};delete c[S.me];S.coachlu=c;refreshNames();render();await write(()=>db.doc('coachlu/'+S.me).delete(),'Request canceled');return}
   if(a==='clearOpenSlots'){const keep=RAWCOACHES.filter(c=>S.links[c.id]);const gone=RAWCOACHES.length-keep.length;if(!gone){toast('Every coach slot is linked.');return}const ids=new Set(keep.map(c=>c.id));await saveCfg({coaches:keep,order:coachOrder().filter(x=>ids.has(x)||x.startsWith('j_'))},`Removed ${gone} unlinked coach slot${gone>1?'s':''}`);return}
   if(a==='myNames'){S.nameEdit=true;render();setTimeout(()=>document.getElementById('myTeamName')?.focus(),0);return}

@@ -4,6 +4,8 @@
 (function(){
   const V='10.12.2';const CDN=`https://www.gstatic.com/firebasejs/${V}/`;
   let ready=null;
+  const INVITE=(()=>{try{return new URLSearchParams(location.search).get('invite')||''}catch(e){return ''}})();
+  const dropInvite=()=>{try{if(INVITE){const u=new URL(location.href);u.searchParams.delete('invite');history.replaceState(null,'',u.pathname+u.search+u.hash)}}catch(e){}};
   const clean=v=>JSON.parse(JSON.stringify(v));
   function init(){
     if(ready)return ready;
@@ -22,6 +24,7 @@
         if(member)fs.setDoc(fs.doc(F,'profiles/'+user.uid),{name:user.displayName||user.email||'',email:user.email||''},{merge:true}).catch(()=>{});
       }
       const ctx={fs,F,A,au,user,admins,member};
+      if(member)dropInvite();
       bar({state:user?'in':'out',ctx});
       if(user&&admins&&admins.includes(user.uid)){importOffer(ctx);
         fs.getDoc(fs.doc(F,'secret/league')).then(s=>{if(!s.exists())pwPanel(ctx,true)}).catch(()=>{})}
@@ -53,10 +56,10 @@
       let h='';
       if(state==='nocfg')h=`<div id="fbBar" style="${css}">Database not connected yet (firebase-config.js is empty). Showing preseason data only.</div>`;
       else if(state==='err')h=`<div id="fbBar" style="${css}">Could not connect: ${msg.replace(/</g,'&lt;')}</div>`;
-      else if(state==='out')h=`<div id="fbBar" style="${css}"><span>Sign in to see the league and set your lineup.</span><button id="fbIn" style="${btn}">Sign in with Google</button></div>`;
+      else if(state==='out')h=`<div id="fbBar" style="${css}"><span>${INVITE?"<strong>You're invited to the league.</strong> Sign in with Google to join.":'Sign in to see the league and set your lineup.'}</span><button id="fbIn" style="${btn}">Sign in with Google</button></div>`;
       else{const u=ctx.user;const adm=ctx.admins&&ctx.admins.includes(u.uid);
         const nm=(u.displayName||u.email||'Signed in').replace(/</g,'&lt;');
-        if(!ctx.member&&ctx.admins!==null)h=`<div id="fbBar" style="${css}"><span><strong>This league is private.</strong> Enter the league password from the commissioner.</span><input id="fbCode" type="password" autocomplete="off" placeholder="League password" style="padding:6px 8px;border-radius:6px;border:0;font:500 13px system-ui;min-width:150px"><button id="fbJoin" style="${btn}">Enter league</button><button id="fbOut" style="${ghost}">Sign out</button><span id="fbCodeMsg" style="flex-basis:100%;color:#FFC9A8;display:none"></span></div>`;
+        if(!ctx.member&&ctx.admins!==null)h=`<div id="fbBar" style="${css}"><span><strong>This league is private.</strong> Enter the league password from the commissioner.</span><input id="fbCode" type="password" autocomplete="off" placeholder="League password" value="${INVITE.replace(/[&<>"]/g,'')}" style="padding:6px 8px;border-radius:6px;border:0;font:500 13px system-ui;min-width:150px"><button id="fbJoin" style="${btn}">Enter league</button><button id="fbOut" style="${ghost}">Sign out</button><span id="fbCodeMsg" style="flex-basis:100%;color:#FFC9A8;display:none"></span></div>`;
         else h=`<div id="fbBar" style="${css}"><span>${nm}${adm?' · Commissioner':''}</span>${ctx.admins===null?`<button id="fbClaim" style="${btn}">I am the commissioner</button>`:''}${adm?`<button id="fbPw" style="${ghost}">League password</button>`:''}<button id="fbOut" style="${ghost}">Sign out</button></div>`}
       b=el(h);document.body.appendChild(b);
       b.querySelector('#fbIn')?.addEventListener('click',async()=>{const c=await init();try{await c.au.signInWithPopup(c.A,new c.au.GoogleAuthProvider())}catch(e){alert('Sign in failed: '+e.message)}});
@@ -65,9 +68,9 @@
       if(jb){const inp=b.querySelector('#fbCode'),m=b.querySelector('#fbCodeMsg');
         const tryJoin=async()=>{const code=(inp.value||'').trim().toLowerCase();if(!code){inp.focus();return}
           jb.disabled=true;jb.textContent='Checking…';
-          try{await ctx.fs.setDoc(ctx.fs.doc(ctx.F,'members/'+ctx.user.uid),{code,name:ctx.user.displayName||ctx.user.email||'',email:ctx.user.email||'',ts:Date.now()});location.reload()}
+          try{await ctx.fs.setDoc(ctx.fs.doc(ctx.F,'members/'+ctx.user.uid),{code,name:ctx.user.displayName||ctx.user.email||'',email:ctx.user.email||'',ts:Date.now()});dropInvite();location.reload()}
           catch(e){m.style.display='block';m.textContent='That password is not right. Check with the commissioner and try again.';jb.disabled=false;jb.textContent='Enter league'}};
-        jb.addEventListener('click',tryJoin);inp.addEventListener('keydown',e=>{if(e.key==='Enter')tryJoin()})}
+        jb.addEventListener('click',tryJoin);inp.addEventListener('keydown',e=>{if(e.key==='Enter')tryJoin()});if(INVITE)setTimeout(tryJoin,0)}
       b.querySelector('#fbPw')?.addEventListener('click',()=>pwPanel(ctx));
       b.querySelector('#fbClaim')?.addEventListener('click',async()=>{if(!confirm('Make this Google account the league commissioner? Only the first person can do this.'))return;try{await ctx.fs.setDoc(ctx.fs.doc(ctx.F,'meta/admins'),{uids:[ctx.user.uid]});location.reload()}catch(e){alert('Could not set commissioner: '+e.message)}});
     };
